@@ -1,0 +1,21 @@
+[package]
+name = "derive_builder"
+version = "0.0.0"
+autotests = false
+edition = "2021"
+publish = false
+
+[lib]
+proc-macro = true
+
+[[test]]
+name = "tests"
+path = "tests/progress.rs"
+
+[dev-dependencies]
+trybuild = { version = "1.0.49", features = ["diff"] }
+
+[dependencies]
+proc-macro2 = "1.0.43"
+syn = {version = "1.0.99", feature =["extra-traits"]}
+quote = "1.0.21"

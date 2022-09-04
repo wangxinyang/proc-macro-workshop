@@ -41,6 +41,7 @@ fn get_builder_expanded(token: &DeriveInput) -> TokenStream {
     let field_token = generate_builder_struct_fields_def(fields);
     // init builder values
     let init_field_token = generate_builder_struct_factory_init_clauses(fields);
+    let function_token = generate_builder_function_def(fields);
     let expanded = quote! {
         // The generated impl.
         impl #name {
@@ -55,6 +56,10 @@ fn get_builder_expanded(token: &DeriveInput) -> TokenStream {
         pub struct #builder_ident {
             #field_token
         }
+
+        impl #builder_ident {
+            #function_token
+        }
     };
     expanded
 }
@@ -62,8 +67,8 @@ fn get_builder_expanded(token: &DeriveInput) -> TokenStream {
 fn get_builder_data_field(token: &DeriveInput) -> syn::Result<&Punctuated<Field, Token!(,)>> {
     match token.data {
         Data::Struct(ref data) => match data.fields {
-            Fields::Named(ref fieldNamed) => {
-                return Ok(&fieldNamed.named)
+            Fields::Named(ref field_named) => {
+                return Ok(&field_named.named)
             }
             _ => Err(syn::Error::new_spanned(
                 token,
@@ -93,4 +98,30 @@ fn generate_builder_struct_factory_init_clauses(fields: &Punctuated<Field, Comma
         #(#idents: std::option::Option::None),*
     };
     token_stream
+}
+
+fn generate_builder_function_def(fields: &Punctuated<Field, Comma>) -> TokenStream {
+    let idents: Vec<_> = fields.iter().map(|f| &f.ident).collect();
+    let tys: Vec<_> = fields.iter().map(|f| &f.ty).collect();
+    let mut final_token_stream = TokenStream::new();
+    // let token_stream = quote! {
+    //     #(
+    //         pub fn #idents(&mut self, #idents: String) -> &mut Self {
+    //             self.#idents = std::option::Option::Some(#idents);
+    //             self
+    //         }
+    //     ),*
+    // };
+    // token_stream
+    for (ident, type_) in idents.iter().zip(tys.iter()) {
+        let tokenstream_piece = quote! {
+            fn #ident(&mut self, #ident: #type_) -> &mut Self {
+                self.#ident = std::option::Option::Some(#ident);
+                self
+            }
+        };
+        // 不断追加新的TokenStream片段到一个公共的TokenStream上
+        final_token_stream.extend(tokenstream_piece);
+    }
+    final_token_stream
 }

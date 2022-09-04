@@ -8,6 +8,7 @@
 
 use derive_builder::Builder;
 
+#[warn(dead_code)]
 #[derive(Builder)]
 pub struct Command {
     executable: String,
@@ -23,6 +24,6 @@ pub struct Command {
 // }
 
 fn main() {
-    let builder = Command::builder();
-    println!("{:#?}", builder);
+    let mut builder = Command::builder();
+    println!("{:#?}", builder.executable("hahah".to_string()));
 }

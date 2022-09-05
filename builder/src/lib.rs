@@ -41,7 +41,10 @@ fn get_builder_expanded(token: &DeriveInput) -> TokenStream {
     let field_token = generate_builder_struct_fields_def(fields);
     // init builder values
     let init_field_token = generate_builder_struct_factory_init_clauses(fields);
-    let function_token = generate_builder_function_def(fields);
+    // 生成CommandBuilder struct中每个参数的set方法
+    let set_data_token = generate_set_data_func_def(fields);
+    // 在CommandBuilder中实现build方法返回Command对象
+    let build_func_token = generate_build_original_object_def(name, fields);
     let expanded = quote! {
         // The generated impl.
         impl #name {
@@ -58,7 +61,8 @@ fn get_builder_expanded(token: &DeriveInput) -> TokenStream {
         }
 
         impl #builder_ident {
-            #function_token
+            #set_data_token
+            #build_func_token
         }
     };
     expanded
@@ -100,7 +104,7 @@ fn generate_builder_struct_factory_init_clauses(fields: &Punctuated<Field, Comma
     token_stream
 }
 
-fn generate_builder_function_def(fields: &Punctuated<Field, Comma>) -> TokenStream {
+fn generate_set_data_func_def(fields: &Punctuated<Field, Comma>) -> TokenStream {
     let idents: Vec<_> = fields.iter().map(|f| &f.ident).collect();
     let tys: Vec<_> = fields.iter().map(|f| &f.ty).collect();
     let mut final_token_stream = TokenStream::new();
@@ -124,4 +128,39 @@ fn generate_builder_function_def(fields: &Punctuated<Field, Comma>) -> TokenStre
         final_token_stream.extend(tokenstream_piece);
     }
     final_token_stream
+}
+
+// 生成build方法的token对象
+fn generate_build_original_object_def(
+    name: &Ident,
+    fields: &Punctuated<Field, Comma>,
+) -> TokenStream {
+    let idents: Vec<_> = fields.iter().map(|f| &f.ident).collect();
+    let mut check_token_vec = Vec::new();
+    let mut result_token_vec = Vec::new();
+    for ident in &idents {
+        let check_token = quote! {
+            if self.#ident.is_none() {
+                let err = format!("{} field missing",  stringify!(#ident));
+                return std::result::Result::Err(err.into());
+            }
+        };
+        check_token_vec.push(check_token);
+    }
+    for ident in &idents {
+        let result_token = quote! {
+            #ident: self.#ident.clone().unwrap()
+        };
+        result_token_vec.push(result_token);
+    }
+    let token = quote! {
+        pub fn build(&mut self) -> Result<#name, std::boxed::Box<dyn std::error::Error>> {
+            #(#check_token_vec)*
+            let ret = #name {
+                #(#result_token_vec),*
+            };
+            std::result::Result::Ok(ret)
+        }
+    };
+    token
 }

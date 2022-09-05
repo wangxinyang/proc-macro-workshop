@@ -9,7 +9,7 @@
 use derive_builder::Builder;
 
 #[warn(dead_code)]
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 pub struct Command {
     executable: String,
     args: Vec<String>,
@@ -25,5 +25,19 @@ pub struct Command {
 
 fn main() {
     let mut builder = Command::builder();
-    println!("{:#?}", builder.executable("hahah".to_string()));
+    builder.executable("cargo".to_owned());
+    builder.args(vec!["build".to_owned(), "--release".to_owned()]);
+    builder.env(vec![]);
+    builder.current_dir("..".to_owned());
+    println!("{:?}", builder);
+    let command = builder.build().unwrap();
+    println!("{:?}", command);
+}
+
+fn test() -> Result<String, std::boxed::Box<dyn std::error::Error>> {
+    let str = "123".clone();
+    let err = std::result::Result::Err("hahah".into());
+    println!("{}", "hello world");
+    println!("err is {:?}", err);
+    return err;
 }

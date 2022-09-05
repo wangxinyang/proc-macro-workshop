@@ -14,7 +14,7 @@ pub struct Command {
     executable: String,
     args: Vec<String>,
     env: Vec<String>,
-    current_dir: String,
+    current_dir: Option<String>,
 }
 
 // #[derive(Builder)]
@@ -29,8 +29,9 @@ fn main() {
     builder.args(vec!["build".to_owned(), "--release".to_owned()]);
     builder.env(vec![]);
     builder.current_dir("..".to_owned());
-    println!("{:?}", builder);
-    let command = builder.build().unwrap();
+    // let test = builder.current_dir.clone().unwrap();
+    // println!("{:?}", builder);
+    let command = builder.build();
     println!("{:?}", command);
 }
 

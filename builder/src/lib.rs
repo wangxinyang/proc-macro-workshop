@@ -88,10 +88,24 @@ fn get_builder_data_field(token: &DeriveInput) -> syn::Result<&Punctuated<Field,
 
 fn generate_builder_struct_fields_def(fields: &Punctuated<Field, Comma>) -> TokenStream {
     let idents: Vec<_> = fields.iter().map(|f| &f.ident).collect();
-    let types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
+    let types: Vec<_> = fields
+        .iter()
+        .map(|f| {
+            if let Some(inner_ty) = get_option_inner_type(&f.ty) {
+                quote! {
+                    std::option::Option<#inner_ty>
+                }
+            } else {
+                let origin_ty = &f.ty;
+                quote! {
+                    std::option::Option<#origin_ty>
+                }
+            }
+        })
+        .collect();
 
     let token_stream = quote! {
-        #(#idents: std::option::Option<#types>),*
+        #(#idents: #types),*
     };
     token_stream
 }
@@ -118,12 +132,23 @@ fn generate_set_data_func_def(fields: &Punctuated<Field, Comma>) -> TokenStream 
     // };
     // token_stream
     for (ident, type_) in idents.iter().zip(tys.iter()) {
-        let tokenstream_piece = quote! {
-            fn #ident(&mut self, #ident: #type_) -> &mut Self {
-                self.#ident = std::option::Option::Some(#ident);
-                self
-            }
-        };
+        let tokenstream_piece;
+        if let Some(inner_ty) = get_option_inner_type(type_) {
+            tokenstream_piece = quote! {
+                fn #ident(&mut self, #ident: #inner_ty) -> &mut Self {
+                    self.#ident = std::option::Option::Some(#ident);
+                    self
+                }
+            };
+        } else {
+            tokenstream_piece = quote! {
+                fn #ident(&mut self, #ident: #type_) -> &mut Self {
+                    self.#ident = std::option::Option::Some(#ident);
+                    self
+                }
+            };
+        }
+
         // 不断追加新的TokenStream片段到一个公共的TokenStream上
         final_token_stream.extend(tokenstream_piece);
     }
@@ -136,22 +161,32 @@ fn generate_build_original_object_def(
     fields: &Punctuated<Field, Comma>,
 ) -> TokenStream {
     let idents: Vec<_> = fields.iter().map(|f| &f.ident).collect();
+    let tys: Vec<_> = fields.iter().map(|f| &f.ty).collect();
     let mut check_token_vec = Vec::new();
     let mut result_token_vec = Vec::new();
-    for ident in &idents {
-        let check_token = quote! {
-            if self.#ident.is_none() {
-                let err = format!("{} field missing",  stringify!(#ident));
-                return std::result::Result::Err(err.into());
-            }
-        };
-        check_token_vec.push(check_token);
+
+    for (ident, type_) in idents.iter().zip(tys.iter()) {
+        if get_option_inner_type(type_).is_none() {
+            let check_token = quote! {
+                if self.#ident.is_none() {
+
+                        let err = format!("{} field missing",  stringify!(#ident));
+                        return std::result::Result::Err(err.into());
+                    }
+            };
+            check_token_vec.push(check_token);
+        }
     }
-    for ident in &idents {
-        let result_token = quote! {
-            #ident: self.#ident.clone().unwrap()
-        };
-        result_token_vec.push(result_token);
+    for (ident, type_) in idents.iter().zip(tys.iter()) {
+        if get_option_inner_type(type_).is_none() {
+            result_token_vec.push(quote! {
+                #ident: self.#ident.clone().unwrap()
+            });
+        } else {
+            result_token_vec.push(quote! {
+                #ident: self.#ident.clone()
+            });
+        }
     }
     let token = quote! {
         pub fn build(&mut self) -> Result<#name, std::boxed::Box<dyn std::error::Error>> {
@@ -163,4 +198,27 @@ fn generate_build_original_object_def(
         }
     };
     token
+}
+
+fn get_option_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(syn::TypePath {
+        path: syn::Path { ref segments, .. },
+        ..
+    }) = ty
+    {
+        if let Some(seg) = segments.last() {
+            if seg.ident == "Option" {
+                if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                    ref args,
+                    ..
+                }) = seg.arguments
+                {
+                    if let Some(syn::GenericArgument::Type(inner_ty)) = args.first() {
+                        return Some(inner_ty);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
